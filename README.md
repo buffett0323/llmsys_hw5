@@ -23,7 +23,8 @@ with multiple GPUs is as follows. You will need at least two GPUs (n=2) for this
 # use GPU-shared flag for n <= 4
 # use GPU flag for n = 8 or 16
 # an interactive job is at most 8 hours (1 hour in this example)
-srun --partition=GPU-shared --gres=gpu:n --time=1:00:00 --pty bash
+# srun --partition=GPU-shared --gres=gpu:n --time=1:00:00 --pty bash
+srun --partition=GPU-shared --gres=gpu:2 --time=1:00:00 --pty bash
 ```
 
 Requesting machines needs time, which will be much longer if there are

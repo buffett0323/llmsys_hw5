@@ -15,7 +15,8 @@ class Partition():
     def __getitem__(self, index):
         '''Given index, get the data according to the partitioned index'''
         # BEGIN_HW5_1_1
-        raise NotImplementedError("Data Parallel Not Implemented Yet")
+        # raise NotImplementedError("Data Parallel Not Implemented Yet")
+        return self.data[index]
         # END_HW5_1_1
 
 class DataPartitioner():
@@ -29,7 +30,15 @@ class DataPartitioner():
         2. Create different partitions of indices according to `sizes` and store in `self.partitions`
         '''
         # BEGIN_HW5_1_1
-        raise NotImplementedError("Data Parallel Not Implemented Yet")
+        # raise NotImplementedError("Data Parallel Not Implemented Yet")
+        indices = list(range(len(data)))
+        rng.shuffle(indices)
+        partition_sizes = [int(size * len(indices)) for size in sizes]
+        cumulative = 0
+        self.partitions = []
+        for ps in partition_sizes:
+            self.partitions.append(indices[cumulative:cumulative + ps])
+            cumulative += ps
         # END_HW5_1_1
 
     def use(self, partition):
@@ -38,7 +47,8 @@ class DataPartitioner():
         Just one line of code. Think it simply.
         '''
         # BEGIN_HW5_1_1
-        raise NotImplementedError("Data Parallel Not Implemented Yet")
+        # raise NotImplementedError("Data Parallel Not Implemented Yet")
+        return Partition(self.data, self.partitions[partition])
         # END_HW5_1_1
 
 def partition_dataset(rank, world_size, dataset, batch_size=128, collate_fn=None):
@@ -54,5 +64,9 @@ def partition_dataset(rank, world_size, dataset, batch_size=128, collate_fn=None
     4. Wrap the dataset with `DataLoader`, remember to customize the `collate_fn`
     """
     # BEGIN_HW5_1
-    raise NotImplementedError("Data Parallel Not Implemented Yet")
+    # raise NotImplementedError("Data Parallel Not Implemented Yet")
+    pt_batch_size = batch_size // world_size
+    partitioner = DataPartitioner(dataset, sizes=[1.0/world_size] * world_size)
+    partition = partitioner.use(rank)
+    return DataLoader(partition, batch_size=pt_batch_size, shuffle=True, collate_fn=collate_fn)
     # END_HW5_1
