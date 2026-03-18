@@ -36,6 +36,8 @@ def run_pp(
     device='cuda',
     model_parallel_mode=None,
     benchmark_only=False,
+    skip_first_epoch=False,
+    benchmark_output='',
     max_batches=0):
     workdir = f'./workdir'
     os.makedirs(workdir, exist_ok=True)
@@ -114,8 +116,9 @@ def run_pp(
         if not PYTEST:
             training_time = end - start
             print(f'Epoch {epoch_idx}: Training Time = {training_time}, Tokens_per_sec = {avg_tokens_per_sec}')
-            total_time.append(training_time)
-            total_tokens_per_sec.append(avg_tokens_per_sec)
+            if not (skip_first_epoch and epoch_idx == 0):
+                total_time.append(training_time)
+                total_tokens_per_sec.append(avg_tokens_per_sec)
 
             if not benchmark_only:
                 validation_loss = evaluate_loss(
@@ -157,6 +160,18 @@ def run_pp(
         # To compute the throughput, you need to sum up the tokens_per_sec across all the devices based on epochs
         print(f'Training time: avg:{np.mean(total_time)}, std:{np.std(total_time)}, \
         tokens_per_second: avg: {np.mean(total_tokens_per_sec)}, std:{np.std(total_tokens_per_sec)}')
+        if benchmark_only and total_time and benchmark_output:
+            workdir = Path('./workdir')
+            result = {
+                'mode': model_parallel_mode or 'single',
+                'training_time_mean': float(np.mean(total_time)),
+                'training_time_std': float(np.std(total_time)) if len(total_time) > 1 else 0.0,
+                'tokens_per_sec_mean': float(np.mean(total_tokens_per_sec)),
+                'tokens_per_sec_std': float(np.std(total_tokens_per_sec)) if len(total_tokens_per_sec) > 1 else 0.0,
+            }
+            out_path = workdir / benchmark_output
+            json.dump(result, open(out_path, 'w'), indent=2)
+            print(f'Benchmark saved to {out_path}')
 
 
 if __name__ == '__main__':
@@ -170,6 +185,8 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--model_parallel_mode', type=str, default=None)
     parser.add_argument('--benchmark_only', action='store_true', help='Run only training benchmarks, skip validation/generation')
+    parser.add_argument('--skip_first_epoch', action='store_true', help='Drop first epoch from metrics (warmup)')
+    parser.add_argument('--benchmark_output', type=str, default='', help='Save benchmark to workdir/<name>.json')
     parser.add_argument('--max_batches', type=int, default=0, help='Max batches per epoch (0=full epoch)')
 
     args = parser.parse_args()
@@ -185,5 +202,7 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate,
         model_parallel_mode=args.model_parallel_mode,
         benchmark_only=args.benchmark_only,
+        skip_first_epoch=args.skip_first_epoch,
+        benchmark_output=args.benchmark_output or '',
         max_batches=args.max_batches
     )

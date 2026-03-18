@@ -6,6 +6,7 @@ import torch.autograd
 import torch.cuda
 from .worker import Task, create_workers
 from .partition import _split_module
+from .worker import use_device
 
 def _clock_cycles(num_batches: int, num_partitions: int) -> Iterable[List[Tuple[int, int]]]:
     '''Generate schedules for each clock cycle.
@@ -26,7 +27,10 @@ def _clock_cycles(num_batches: int, num_partitions: int) -> Iterable[List[Tuple[
     This function should yield schedules for each clock cycle.
     '''
     # BEGIN_HW5_2_1
-    raise NotImplementedError("Schedule Generation Not Implemented Yet")
+    # raise NotImplementedError("Schedule Generation Not Implemented Yet")
+    for k in range(num_batches + num_partitions - 1):
+        schedule = [(i, j) for i in range(num_batches) for j in range(num_partitions) if i + j == k]
+        yield schedule
     # END_HW5_2_1
 
 class Pipe(nn.Module):
@@ -53,7 +57,15 @@ class Pipe(nn.Module):
         Please note that you should put the result on the last device. Putting the result on the same device as input x will lead to pipeline parallel training failing.
         '''
         # BEGIN_HW5_2_2
-        raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
+        # raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
+        # 1. Divide input into micro-batches
+        batches = [x[i:i + self.split_size] for i in range(0, len(x), self.split_size)]
+        num_micro_batches = len(batches)
+        # 2. Generate clock schedule and 3. Compute
+        for schedule in _clock_cycles(num_micro_batches, len(self.partitions)):
+            self.compute(batches, schedule)
+        # 4. Concatenate and put on last device
+        return torch.cat(batches, dim=0).to(self.devices[-1])
         # END_HW5_2_2
 
     def compute(self, batches, schedule: List[Tuple[int, int]]) -> None:
@@ -69,6 +81,9 @@ class Pipe(nn.Module):
         devices = self.devices
 
         # BEGIN_HW5_2_2
-        raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
+        # raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
+        for i, j in schedule:
+            with use_device(devices[j]):
+                batches[i] = partitions[j](batches[i].to(devices[j]))
         # END_HW5_2_2
 

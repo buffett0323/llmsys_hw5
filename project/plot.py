@@ -110,14 +110,64 @@ def plot_data_parallel_benchmark(workdir='./workdir', outdir='./submit_figures')
                  ylabel='Tokens Per Second')
         print(f"Saved {outdir}/tokens_per_second.png")
 
+
+def plot_pipeline_benchmark(workdir='./workdir', outdir='./submit_figures'):
+    """
+    Load pipeline vs model parallel benchmark results and create 2 figures.
+    """
+    workdir = Path(workdir)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    mp_file = workdir / 'benchmark_model_parallel.json'
+    pp_file = workdir / 'benchmark_pipeline_parallel.json'
+
+    mp_data = json.load(open(mp_file)) if mp_file.exists() else None
+    pp_data = json.load(open(pp_file)) if pp_file.exists() else None
+
+    if mp_data is None and pp_data is None:
+        print("No pipeline benchmark data found. Run:")
+        print("  python project/run_pipeline.py --model_parallel_mode='model_parallel' --benchmark_only --skip_first_epoch --benchmark_output benchmark_model_parallel.json")
+        print("  python project/run_pipeline.py --model_parallel_mode='pipeline_parallel' --benchmark_only --skip_first_epoch --benchmark_output benchmark_pipeline_parallel.json")
+        return
+
+    means_t, stds_t, labels_t = [], [], []
+    means_tok, stds_tok, labels_tok = [], [], []
+
+    for data, label in [(pp_data, 'Pipeline Parallel'), (mp_data, 'Model Parallel')]:
+        if data:
+            means_t.append(data['training_time_mean'])
+            stds_t.append(data['training_time_std'])
+            labels_t.append(label)
+            means_tok.append(data['tokens_per_sec_mean'])
+            stds_tok.append(data['tokens_per_sec_std'])
+            labels_tok.append(label)
+
+    if means_t:
+        plot_bar(means_t, stds_t, labels_t,
+                 outdir / 'pp_training_time.png',
+                 ylabel='Training Time (Second)')
+        print(f"Saved {outdir}/pp_training_time.png")
+
+    if means_tok:
+        plot_bar(means_tok, stds_tok, labels_tok,
+                 outdir / 'pp_tokens_per_second.png',
+                 ylabel='Tokens Per Second')
+        print(f"Saved {outdir}/pp_tokens_per_second.png")
+
+
 # Fill the data points here
 if __name__ == '__main__':
     import sys
     workdir = sys.argv[1] if len(sys.argv) > 1 else './workdir'
     outdir = sys.argv[2] if len(sys.argv) > 2 else './submit_figures'
+    mode = sys.argv[3] if len(sys.argv) > 3 else 'dp'
     # Resolve paths relative to project dir
     project_dir = Path(__file__).resolve().parent
     parent_dir = project_dir.parent
     workdir = parent_dir / workdir.lstrip('./')
     outdir = parent_dir / outdir.lstrip('./')
-    plot_data_parallel_benchmark(workdir=workdir, outdir=outdir)
+    if mode == 'pp':
+        plot_pipeline_benchmark(workdir=workdir, outdir=outdir)
+    else:
+        plot_data_parallel_benchmark(workdir=workdir, outdir=outdir)
