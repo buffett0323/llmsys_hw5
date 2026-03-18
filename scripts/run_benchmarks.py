@@ -87,8 +87,10 @@ def main():
     parser.add_argument("--python", type=str, default=str(Path(__file__).resolve().parents[1] / ".venv/bin/python"))
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--warmup-epochs", type=int, default=1)
-    parser.add_argument("--pipeline-batch-size", type=int, default=96)
-    parser.add_argument("--pipeline-n-chunk", type=int, default=2)
+    parser.add_argument("--dp-batch-size-single", type=int, default=32, help="Batch size for DP single GPU (default 32 for 16GB GPUs)")
+    parser.add_argument("--dp-batch-size-multi", type=int, default=64, help="Batch size for DP 2 GPUs (default 64 for 16GB GPUs)")
+    parser.add_argument("--pipeline-batch-size", type=int, default=48, help="Batch size for pipeline/model parallel (default 48 for 16GB GPUs)")
+    parser.add_argument("--pipeline-n-chunk", type=int, default=4)
     parser.add_argument("--mode", type=str, choices=["student", "grader"], default="student")
     parser.add_argument("--dp-time-threshold", type=float, default=1.5)
     parser.add_argument("--dp-throughput-threshold", type=float, default=1.5)
@@ -97,9 +99,17 @@ def main():
     parser.add_argument("--skip-dp", action="store_true", help="Skip data parallel benchmarks")
     parser.add_argument("--skip-pp", action="store_true", help="Skip pipeline parallel benchmarks")
     parser.add_argument("--reuse-logs", action="store_true", help="Reuse existing log files if present")
+    parser.add_argument("--low-memory", action="store_true", help="Use smaller batch sizes for 16GB GPUs (DP: 16/32, PP: 24)")
     parser.add_argument("--fast", action="store_true", help="Fast mode: run only 10 batches (5 warmup, 5 measured) instead of full epochs")
     parser.add_argument("--max-batches", type=int, default=0, help="Max batches per run (0=full epochs, implies --fast behavior)")
     args = parser.parse_args()
+
+    # Low memory mode: reduce batch sizes for 16GB GPUs
+    if args.low_memory:
+        args.dp_batch_size_single = 16
+        args.dp_batch_size_multi = 32
+        args.pipeline_batch_size = 24
+        print("[low-memory] Using reduced batch sizes for 16GB GPUs")
 
     # Fast mode defaults
     if args.fast and args.max_batches == 0:
@@ -124,8 +134,8 @@ def main():
 
     # Use different log names for fast mode
     suffix = f"_fast{args.max_batches}" if args.max_batches > 0 else ""
-    dp_single_log = perf_dir / f"dp_ws1_b64{suffix}.log"
-    dp_multi_log = perf_dir / f"dp_ws2_b128{suffix}.log"
+    dp_single_log = perf_dir / f"dp_ws1_b{args.dp_batch_size_single}{suffix}.log"
+    dp_multi_log = perf_dir / f"dp_ws2_b{args.dp_batch_size_multi}{suffix}.log"
     mp_log = perf_dir / f"pp_model_b{args.pipeline_batch_size}{suffix}.log"
     pp_log = perf_dir / f"pp_pipeline_b{args.pipeline_batch_size}_n{args.pipeline_n_chunk}{suffix}.log"
 
@@ -141,13 +151,13 @@ def main():
     if not args.skip_dp:
         if should_run(dp_single_log):
             run_and_log(
-                [py, "project/run_data_parallel.py", "--world_size", "1", "--batch_size", "64", "--n_epochs", str(args.epochs), "--benchmark_only"] + max_batches_args,
+                [py, "project/run_data_parallel.py", "--world_size", "1", "--batch_size", str(args.dp_batch_size_single), "--n_epochs", str(args.epochs), "--benchmark_only"] + max_batches_args,
                 dp_single_log,
                 root,
             )
         if should_run(dp_multi_log):
             run_and_log(
-                [py, "project/run_data_parallel.py", "--world_size", "2", "--batch_size", "128", "--n_epochs", str(args.epochs), "--benchmark_only"] + max_batches_args,
+                [py, "project/run_data_parallel.py", "--world_size", "2", "--batch_size", str(args.dp_batch_size_multi), "--n_epochs", str(args.epochs), "--benchmark_only"] + max_batches_args,
                 dp_multi_log,
                 root,
             )
